@@ -15,7 +15,7 @@ from datetime import datetime
 from telebot import types
 from urllib.parse import quote
 
-BOT_TOKEN = "8746181680:AAF4KMfudph2ezOik6v3-b4zj3lof8iW8BQ"
+BOT_TOKEN = "8896996894:AAELCsHANp2VdBTmrJFZIjdmp0X18e1dOIc"
 OWNER_ID = 5277564584
 REQUIRED_CHANNEL_ID = -1004447049309
 REQUIRED_CHANNEL_URL = "https://t.me/+7DX76Z1638lmNmIy"
@@ -361,7 +361,7 @@ def get_main_keyboard():
 
 def get_other_menu():
     markup = types.InlineKeyboardMarkup()
-    markup.add(types.InlineKeyboardButton("🎨 Генератор фото", callback_data="menu_imagegen"))
+    markup.add(types.InlineKeyboardButton("Генератор фото", callback_data="menu_imagegen"))
     markup.add(types.InlineKeyboardButton("Временная почта", callback_data="menu_tempmail"))
     markup.add(types.InlineKeyboardButton("Прокси генератор", callback_data="menu_proxy"))
     markup.add(types.InlineKeyboardButton("‹ Вернуться", callback_data="menu_main"))
@@ -550,7 +550,6 @@ WELCOME_TEXT = """«Router» - пришлите запрос в следующе
 └ 77:01:0001075:1361 – кадастровый номер
 
 📞 +79991099999 – номер телефона
-📧 @router, 1234567890 – Telegram
 📪 tema@gmail.com – Email
 
 💻 Доп. форматы
@@ -559,7 +558,7 @@ WELCOME_TEXT = """«Router» - пришлите запрос в следующе
 ├ UQ... / EQ... – TON-кошелёк
 └ 8.8.8.8 – IP-адрес 
 
-📷 Отправьте фото — поиск по лицу (SimilarFaces + Search4Faces)"""
+📷 Отправьте фото — поиск по лицу"""
 
 
 def send_menu_message(chat_id, text, photo_url, reply_markup):
@@ -731,9 +730,9 @@ def handle_query(call):
 
     elif call.data == "menu_imagegen":
         prompt_text = (
-            "<b>🎨 Генератор фото</b>\n\n"
+            "<b>Генератор фото</b>\n\n"
             "Введите промпт для генерации изображения.\n\n"
-            "<i>Пример: кот в очках сидит в библиотеке</i>"
+            "<i>Пишите на англ. для лучшего качества.</i>"
         )
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
