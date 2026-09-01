@@ -15,7 +15,7 @@ from datetime import datetime
 from telebot import types
 from urllib.parse import quote
 
-BOT_TOKEN = "8746181680:AAF4KMfudph2ezOik6v3-b4zj3lof8iW8BQ"
+BOT_TOKEN = "8896996894:AAELCsHANp2VdBTmrJFZljdmp0"
 OWNER_ID = 5277564584
 REQUIRED_CHANNEL_ID = -1004447049309
 REQUIRED_CHANNEL_URL = "https://t.me/+7DX76Z1638lmNmIy"
