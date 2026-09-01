@@ -15,7 +15,7 @@ from datetime import datetime
 from telebot import types
 from urllib.parse import quote
 
-BOT_TOKEN = "8896996894:AAELCsHANp2VdBTmrJFZljdmp0"
+BOT_TOKEN = "8896996894:AAELCsHANp2VdBTmrJFZIjdmp0X18e1dOIc"
 OWNER_ID = 5277564584
 REQUIRED_CHANNEL_ID = -1004447049309
 REQUIRED_CHANNEL_URL = "https://t.me/+7DX76Z1638lmNmIy"
@@ -1037,7 +1037,7 @@ def handle_query(call):
             markup.add(types.InlineKeyboardButton("📋 Получить логи", callback_data="iplog_getlogs"))
         markup.add(types.InlineKeyboardButton("‹ Назад", callback_data="menu_other"))
 
-        text = "<b>🎣 IP Логгер</b>\n\nСоздай ссылку — когда кто-то откроет её, ты получишь его IP, устройство и страну."
+        text = "<b>IP Логгер</b>\n\nПока что не работает."
         if stored:
             text += f"\n\n<b>Активный логгер:</b>\n🔗 <code>{stored['url']}</code>"
         try:
@@ -1215,7 +1215,7 @@ def _imagegen_process(message):
         bot.send_message(chat_id, "Промпт не может быть пустым.")
         return
 
-    wait_msg = bot.send_message(chat_id, "🎨 Генерация фото... (до 90 секунд)")
+    wait_msg = bot.send_message(chat_id, "Генерация фото...")
 
     def _do():
         img_data = generate_image(prompt)
@@ -1225,7 +1225,7 @@ def _imagegen_process(message):
             pass
 
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("🔄 Сгенерировать ещё", callback_data="menu_imagegen"))
+        markup.add(types.InlineKeyboardButton("Сгенерировать ещё", callback_data="menu_imagegen"))
         markup.add(types.InlineKeyboardButton("‹ Назад", callback_data="menu_other"))
 
         if img_data:
@@ -1801,25 +1801,25 @@ def format_htmlweb(data: dict) -> str:
     city    = data.get("0", {})
 
     if country.get("name"):
-        lines.append(f"  🌍 Страна: <code>{country['name']}</code>")
+        lines.append(f"  Страна: <code>{country['name']}</code>")
     if region.get("name"):
-        lines.append(f"  🏛 Регион: <code>{region['name']}</code>")
+        lines.append(f"  Регион: <code>{region['name']}</code>")
     if region.get("okrug") or data.get("okrug"):
-        lines.append(f"  🗺 Округ: <code>{region.get('okrug') or data.get('okrug','')}</code>")
+        lines.append(f"  Округ: <code>{region.get('okrug') or data.get('okrug','')}</code>")
     if city.get("name"):
-        lines.append(f"  🏙 Город: <code>{city['name']}</code>")
+        lines.append(f"  Город: <code>{city['name']}</code>")
     if city.get("oper_brand") or city.get("oper"):
         op = city.get("oper_brand") or city.get("oper","")
-        lines.append(f"  📶 Оператор: <code>{op}</code>")
+        lines.append(f"  Оператор: <code>{op}</code>")
     tz = data.get("time_zone") or city.get("time_zone")
     if tz is not None:
-        lines.append(f"  🕐 Часовой пояс: <code>UTC+{tz}</code>")
+        lines.append(f"  Часовой пояс: <code>UTC+{tz}</code>")
     lat = city.get("latitude")
     lon = city.get("longitude")
     if lat and lon:
-        lines.append(f"  📌 Координаты: <code>{lat}, {lon}</code>")
+        lines.append(f"  Координаты: <code>{lat}, {lon}</code>")
     if city.get("def"):
-        lines.append(f"  🔢 Диапазон: <code>{city['def']}</code>")
+        lines.append(f"  Диапазон: <code>{city['def']}</code>")
     return "\n".join(lines)
 
 
@@ -1840,13 +1840,13 @@ def format_jitler_phone(data: dict) -> str:
 
     # Базовая инфо
     if resp.get("phone"):
-        lines.append(f"  📱 Номер: <code>{resp['phone']}</code>")
+        lines.append(f"  Номер: <code>{resp['phone']}</code>")
     if resp.get("operator"):
-        lines.append(f"  📶 Оператор: <code>{resp['operator']}</code>")
+        lines.append(f"  Оператор: <code>{resp['operator']}</code>")
     if resp.get("region"):
-        lines.append(f"  📍 Регион: <code>{resp['region']}</code>")
+        lines.append(f"  Регион: <code>{resp['region']}</code>")
     if resp.get("country"):
-        lines.append(f"  🌍 Страна: <code>{resp['country']}</code>")
+        lines.append(f"  Страна: <code>{resp['country']}</code>")
 
     # Телефонные книги
     books = resp.get("phonebooks", [])
