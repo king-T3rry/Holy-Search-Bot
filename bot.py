@@ -442,7 +442,7 @@ def get_other_menu():
     markup.add(types.InlineKeyboardButton("Генератор фото", callback_data="menu_imagegen"))
     markup.add(types.InlineKeyboardButton("Временная почта", callback_data="menu_tempmail"))
     markup.add(types.InlineKeyboardButton("Прокси генератор", callback_data="menu_proxy"))
-    markup.add(types.InlineKeyboardButton("🎣 IP Логгер", callback_data="menu_iplogger"))
+    markup.add(types.InlineKeyboardButton("IP Логгер", callback_data="menu_iplogger"))
     markup.add(types.InlineKeyboardButton("‹ Вернуться", callback_data="menu_main"))
     return markup
 
@@ -647,9 +647,14 @@ def send_menu_message(chat_id, text, photo_url, reply_markup):
         "reply_markup": reply_markup,
         "parse_mode": "HTML",
     }
-    preview = photo_preview(photo_url)
-    if preview is not None:
-        kwargs["link_preview_options"] = preview
+    if photo_url:
+        preview = photo_preview(photo_url)
+        if preview is not None:
+            kwargs["link_preview_options"] = preview
+        else:
+            kwargs["disable_web_page_preview"] = True
+    else:
+        kwargs["disable_web_page_preview"] = True
     bot.send_message(**kwargs)
 
 
@@ -661,9 +666,14 @@ def edit_menu_message(chat_id, message_id, text, photo_url, reply_markup):
         "reply_markup": reply_markup,
         "parse_mode": "HTML",
     }
-    preview = photo_preview(photo_url)
-    if preview is not None:
-        kwargs["link_preview_options"] = preview
+    if photo_url:
+        preview = photo_preview(photo_url)
+        if preview is not None:
+            kwargs["link_preview_options"] = preview
+        else:
+            kwargs["disable_web_page_preview"] = True
+    else:
+        kwargs["disable_web_page_preview"] = True
     bot.edit_message_text(**kwargs)
 
 
@@ -723,7 +733,7 @@ def handle_query(call):
                 call.message.chat.id,
                 call.message.message_id,
                 profile_text,
-                PHOTO_PROFILE,
+                "",
                 get_profile_keyboard()
             )
         except Exception:
@@ -978,16 +988,11 @@ def handle_query(call):
 
     elif call.data == "menu_proxy":
         bot.send_chat_action(call.message.chat.id, 'typing')
-        msg = bot.send_message(call.message.chat.id, "Собираю прокси...", disable_web_page_preview=True)
         def _do():
             proxies = generate_proxies()
-            try:
-                bot.delete_message(call.message.chat.id, msg.message_id)
-            except Exception:
-                pass
             if not proxies:
-                bot.send_message(call.message.chat.id, "Не удалось собрать прокси. Попробуйте позже.",
-                                 reply_markup=get_other_menu(), disable_web_page_preview=True)
+                send_menu_message(call.message.chat.id, "Не удалось собрать прокси. Попробуйте позже.",
+                                  PHOTO_TOOLS, get_other_menu())
                 return
             content = "\n".join(proxies)
             file_stream = io.BytesIO(content.encode("utf-8"))
@@ -1037,16 +1042,14 @@ def handle_query(call):
             markup.add(types.InlineKeyboardButton("📋 Получить логи", callback_data="iplog_getlogs"))
         markup.add(types.InlineKeyboardButton("‹ Назад", callback_data="menu_other"))
 
-        text = "<b>IP Логгер</b>\n\nПока что не работает."
+        text = "<b>IP Логгер (unwork)</b>\n\nСоздай ссылку — когда кто-то откроет её, ты получишь его IP, устройство и страну."
         if stored:
             text += f"\n\n<b>Активный логгер:</b>\n🔗 <code>{stored['url']}</code>"
         try:
-            bot.edit_message_text(text, call.message.chat.id, call.message.message_id,
-                                  parse_mode="HTML", reply_markup=markup,
-                                  disable_web_page_preview=True)
+            edit_menu_message(call.message.chat.id, call.message.message_id,
+                              text, PHOTO_TOOLS, markup)
         except Exception:
-            bot.send_message(call.message.chat.id, text, parse_mode="HTML",
-                             reply_markup=markup, disable_web_page_preview=True)
+            send_menu_message(call.message.chat.id, text, PHOTO_TOOLS, markup)
 
     elif call.data == "iplog_create":
         bot.answer_callback_query(call.id, text="Создаю логгер...")
@@ -1215,7 +1218,7 @@ def _imagegen_process(message):
         bot.send_message(chat_id, "Промпт не может быть пустым.")
         return
 
-    wait_msg = bot.send_message(chat_id, "Генерация фото...")
+    wait_msg = bot.send_message(chat_id, "🎨 Генерация фото... (до 90 секунд)")
 
     def _do():
         img_data = generate_image(prompt)
@@ -1225,7 +1228,7 @@ def _imagegen_process(message):
             pass
 
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Сгенерировать ещё", callback_data="menu_imagegen"))
+        markup.add(types.InlineKeyboardButton("🔄 Сгенерировать ещё", callback_data="menu_imagegen"))
         markup.add(types.InlineKeyboardButton("‹ Назад", callback_data="menu_other"))
 
         if img_data:
@@ -1638,8 +1641,9 @@ def run_search(text):
         result["results"]["leakcheck"] = call_leakcheck(text)
     else:
         result["query_type"] = "default"
-        # DepSearch: для кириллического ФИО — авто, для остального — nick:
-        if re.match(r'^\[А-ЯЁа-яё\\s\.\\-]+$', text):
+        # DepSearch: кириллика + пробелы + дата/год → ФИО (API сам распознаёт),
+        # иначе → nick: (логины, латиница и т.д.)
+        if re.match(r'^[А-ЯЁа-яё\s.\-\d,]+$', text.strip()):
             dep_q = text
         else:
             dep_q = f"nick:{text}"
@@ -1682,7 +1686,11 @@ def similarfaces_search(image_bytes, filename="face.jpg", mime="image/jpeg"):
     search_results = []
     search_raw = None
     try:
-        frontend_id2 = hashlib.sha256(f"{minute}:search-faces".encode()).hexdigest()
+        # IMPORTANT: according to the similarfaces.me frontend JS, the search-faces
+        # endpoint uses the SAME X-Frontend-ID as detect-faces, i.e. hashed with
+        # the literal string "detect-faces" (NOT "search-faces").  See homepage JS
+        # line where `gDt("detect-faces")` is reused for the /bff/search-faces call.
+        frontend_id2 = hashlib.sha256(f"{minute}:detect-faces".encode()).hexdigest()
         files = {"image": (filename, image_bytes, mime)}
         r = requests.post(
             search_url,
@@ -1801,25 +1809,25 @@ def format_htmlweb(data: dict) -> str:
     city    = data.get("0", {})
 
     if country.get("name"):
-        lines.append(f"  Страна: <code>{country['name']}</code>")
+        lines.append(f"  🌍 Страна: <code>{country['name']}</code>")
     if region.get("name"):
-        lines.append(f"  Регион: <code>{region['name']}</code>")
+        lines.append(f"  🏛 Регион: <code>{region['name']}</code>")
     if region.get("okrug") or data.get("okrug"):
-        lines.append(f"  Округ: <code>{region.get('okrug') or data.get('okrug','')}</code>")
+        lines.append(f"  🗺 Округ: <code>{region.get('okrug') or data.get('okrug','')}</code>")
     if city.get("name"):
-        lines.append(f"  Город: <code>{city['name']}</code>")
+        lines.append(f"  🏙 Город: <code>{city['name']}</code>")
     if city.get("oper_brand") or city.get("oper"):
         op = city.get("oper_brand") or city.get("oper","")
-        lines.append(f"  Оператор: <code>{op}</code>")
+        lines.append(f"  📶 Оператор: <code>{op}</code>")
     tz = data.get("time_zone") or city.get("time_zone")
     if tz is not None:
-        lines.append(f"  Часовой пояс: <code>UTC+{tz}</code>")
+        lines.append(f"  🕐 Часовой пояс: <code>UTC+{tz}</code>")
     lat = city.get("latitude")
     lon = city.get("longitude")
     if lat and lon:
-        lines.append(f"  Координаты: <code>{lat}, {lon}</code>")
+        lines.append(f"  📌 Координаты: <code>{lat}, {lon}</code>")
     if city.get("def"):
-        lines.append(f"  Диапазон: <code>{city['def']}</code>")
+        lines.append(f"  🔢 Диапазон: <code>{city['def']}</code>")
     return "\n".join(lines)
 
 
@@ -1840,13 +1848,13 @@ def format_jitler_phone(data: dict) -> str:
 
     # Базовая инфо
     if resp.get("phone"):
-        lines.append(f"  Номер: <code>{resp['phone']}</code>")
+        lines.append(f"  📱 Номер: <code>{resp['phone']}</code>")
     if resp.get("operator"):
-        lines.append(f"  Оператор: <code>{resp['operator']}</code>")
+        lines.append(f"  📶 Оператор: <code>{resp['operator']}</code>")
     if resp.get("region"):
-        lines.append(f"  Регион: <code>{resp['region']}</code>")
+        lines.append(f"  📍 Регион: <code>{resp['region']}</code>")
     if resp.get("country"):
-        lines.append(f"  Страна: <code>{resp['country']}</code>")
+        lines.append(f"  🌍 Страна: <code>{resp['country']}</code>")
 
     # Телефонные книги
     books = resp.get("phonebooks", [])
@@ -2022,32 +2030,15 @@ def _phone_result_to_txt(data: dict) -> str:
         if lat and lon:          lines.append(f"  Координаты:    {lat}, {lon}")
         if city.get("def"):      lines.append(f"  Диапазон:      {city['def']}")
 
-    # ── База данных ──────────────────────────────────────────────────────────
-    ds = results.get("depsearch", {})
+    # ── Остальные источники — сырой JSON ────────────────────────────────────
+    for src_key, src_data in results.items():
+        if src_key in ("jitler", "htmlweb_geo"):
+            continue  # уже выведены красиво выше
+        if not src_data:
+            continue
+        lines.append(f"\n[ {src_key.upper()} ]")
+        lines.append(json.dumps(src_data, ensure_ascii=False, indent=2))
 
-    # phone_info из DepSearch (если есть)
-    ph_info = ds.get("phone_info", {})
-    if ph_info:
-        lines.append("\n[ ИНФОРМАЦИЯ ОБ ОПЕРАТОРЕ ]")
-        for label, key in [("Номер","phone"),("Оператор","operator"),
-                           ("Регион","region"),("Часовой пояс","timezone"),
-                           ("Местное время","local_time")]:
-            v = ph_info.get(key)
-            if v: lines.append(f"  {label}: {v}")
-
-    ds_results = ds.get("results", [])
-    if isinstance(ds_results, list) and ds_results:
-        lines.append(f"\n[ БАЗА ДАННЫХ — {len(ds_results)} записей ]")
-        for i, entry in enumerate(ds_results[:30], 1):
-            row_parts = []
-            for k, v in entry.items():
-                if v and str(v).strip() not in ("-", "None", "null", ""):
-                    row_parts.append(f"    {k}: {v}")
-            if row_parts:
-                lines.append(f"\n  #{i}")
-                lines.extend(row_parts)
-
-    lines.append("\n" + "=" * 60)
     return "\n".join(lines)
 
 
@@ -2084,184 +2075,12 @@ def _generic_result_to_txt(data: dict) -> str:
     results = data.get("results", {})
     lines   = [f"РЕЗУЛЬТАТЫ ПОИСКА: {query}", f"Дата: {ts}", "=" * 60]
 
-    # Скрытые имена источников → нейтральные заголовки
-    _src_labels = {
-        "depsearch":           "БАЗА ДАННЫХ",
-        "leakcheck":           "УТЕЧКИ ДАННЫХ",
-        "quickflow":           "TELEGRAM ДАННЫЕ",
-        "quickflow_by_id":     "TELEGRAM (по ID)",
-        "quickflow_by_username": "TELEGRAM (по нику)",
-        "shodan":              "ДАННЫЕ ОБ IP",
-        "ofdata":              "ДАННЫЕ ОРГАНИЗАЦИИ",
-        "ofdata_company":      "ДАННЫЕ ОРГАНИЗАЦИИ",
-        "ofdata_entrepreneur":  "ДАННЫЕ ИП",
-        "ofdata_search_org":   "ПОИСК ОРГАНИЗАЦИЙ",
-        "ofdata_search_ent":   "ПОИСК ИП",
-        "ton_transactions":    "TON ТРАНЗАКЦИИ",
-        "github_user":         "GITHUB ПРОФИЛЬ",
-        "github_repos":        "GITHUB РЕПОЗИТОРИИ",
-        "github_gists":        "GITHUB GISTS",
-        "github_events":       "GITHUB АКТИВНОСТЬ",
-        "github_orgs":         "GITHUB ОРГАНИЗАЦИИ",
-        "github_followers":    "ПОДПИСЧИКИ",
-        "github_following":    "ПОДПИСКИ",
-        "github_starred":      "STARRED",
-        "similarfaces_me":     "ПОИСК ПО ЛИЦУ",
-        "search4faces_com":    "ПОИСК ПО ФОТО",
-        "vk_official":         "VK ПРОФИЛЬ",
-        "vk_official_2":       "VK ПРОФИЛЬ",
-        "looka":               "VK ДАННЫЕ",
-        "220vk":               "VK ДАННЫЕ",
-        "murix":               "VK ДАННЫЕ",
-    }
-
     for src_key, src_data in results.items():
-        if not isinstance(src_data, dict):
+        if not src_data:
             continue
-        label = _src_labels.get(src_key, "ДАННЫЕ")
+        lines.append(f"\n[ {src_key.upper()} ]")
+        lines.append(json.dumps(src_data, ensure_ascii=False, indent=2))
 
-        # Проверяем ошибку
-        if src_data.get("error") and not src_data.get("results") and not src_data.get("data"):
-            continue  # пустой источник — скипаем
-
-        lines.append(f"\n[ {label} ]")
-
-        # DepSearch — форматируем записи
-        if src_key == "depsearch":
-            ph_info = src_data.get("phone_info", {})
-            if ph_info:
-                for lbl, key in [("Номер","phone"),("Оператор","operator"),
-                                  ("Регион","region"),("Часовой пояс","timezone")]:
-                    v = ph_info.get(key)
-                    if v: lines.append(f"  {lbl}: {v}")
-            ip_info = src_data.get("ip_info", {})
-            if ip_info:
-                for lbl, key in [("Страна","country"),("Город","city"),
-                                  ("Провайдер","provider"),("Прокси","is_proxy")]:
-                    v = ip_info.get(key)
-                    if v: lines.append(f"  {lbl}: {v}")
-            recs = src_data.get("results", [])
-            if isinstance(recs, list) and recs:
-                lines.append(f"  Найдено записей: {len(recs)}")
-                for i, entry in enumerate(recs[:30], 1):
-                    parts = []
-                    for k, v in entry.items():
-                        if v and str(v).strip() not in ("-", "None", "null", ""):
-                            parts.append(f"    {k}: {v}")
-                    if parts:
-                        lines.append(f"\n  #{i}")
-                        lines.extend(parts)
-            continue
-
-        # LeakCheck
-        if src_key == "leakcheck":
-            found = src_data.get("found")
-            sources = src_data.get("sources", [])
-            lines.append(f"  Найдено в утечках: {'Да' if found else 'Нет'}")
-            if sources:
-                lines.append(f"  Источники ({len(sources)}):")
-                for s in sources[:20]:
-                    lines.append(f"    - {s.get('name', s) if isinstance(s, dict) else s}")
-            continue
-
-        # Quickflow (Telegram)
-        if src_key.startswith("quickflow"):
-            for k in ("id","first_name","last_name","username","phone","bio"):
-                v = src_data.get(k) or (src_data.get("user") or {}).get(k)
-                if v: lines.append(f"  {k}: {v}")
-            continue
-
-        # Shodan (IP)
-        if src_key == "shodan":
-            for k in ("ip_str","country_name","city","org","isp","os"):
-                v = src_data.get(k)
-                if v: lines.append(f"  {k}: {v}")
-            ports = src_data.get("ports", [])
-            if ports: lines.append(f"  Порты: {', '.join(str(p) for p in ports[:20])}")
-            vulns = src_data.get("vulns", [])
-            if vulns: lines.append(f"  Уязвимости: {', '.join(list(vulns)[:10])}")
-            continue
-
-        # OfData
-        if src_key.startswith("ofdata"):
-            meta = src_data.get("meta", {})
-            d = src_data.get("data", {})
-            if isinstance(d, dict):
-                recs = d.get("Записи", [d])
-                for i, rec in enumerate(recs[:10] if isinstance(recs, list) else [d], 1):
-                    if isinstance(rec, dict):
-                        for k, v in rec.items():
-                            if v and str(v) not in ("-","None","null",""):
-                                lines.append(f"  {k}: {v}")
-            elif isinstance(d, list):
-                for item in d[:10]:
-                    if isinstance(item, dict):
-                        for k, v in item.items():
-                            if v: lines.append(f"  {k}: {v}")
-            continue
-
-        # GitHub
-        if src_key.startswith("github"):
-            if isinstance(src_data, list):
-                for i, item in enumerate(src_data[:10], 1):
-                    if isinstance(item, dict):
-                        n = item.get("name") or item.get("full_name") or item.get("login") or ""
-                        u = item.get("html_url") or item.get("url") or ""
-                        lines.append(f"  {i}. {n}  {u}")
-            else:
-                for k in ("login","name","email","bio","location","company",
-                          "public_repos","followers","following","created_at"):
-                    v = src_data.get(k)
-                    if v: lines.append(f"  {k}: {v}")
-            continue
-
-        # TON
-        if src_key == "ton_transactions":
-            txs = src_data.get("transactions", src_data.get("data", []))
-            if isinstance(txs, list):
-                lines.append(f"  Транзакций: {len(txs)}")
-                for tx in txs[:5]:
-                    if isinstance(tx, dict):
-                        lines.append(f"  - hash:{tx.get('hash','')[:16]}... "
-                                     f"value:{tx.get('in_msg',{}).get('value','?')}")
-            continue
-
-        # VK APIs
-        if src_key in ("vk_official","vk_official_2"):
-            resp = src_data.get("response", [{}])
-            if resp and isinstance(resp, list):
-                u = resp[0]
-                for k in ("first_name","last_name","bdate","city","country","domain"):
-                    v = u.get(k)
-                    if isinstance(v, dict): v = v.get("title")
-                    if v: lines.append(f"  {k}: {v}")
-            continue
-
-        if src_key in ("looka","220vk","murix"):
-            for k, v in src_data.items():
-                if v and str(v) not in ("-","None","null","") and not k.startswith("_"):
-                    lines.append(f"  {k}: {v}")
-            continue
-
-        # Generic fallback
-        def _flatten(d, prefix="", depth=0):
-            out = []
-            if depth > 3: return out
-            if isinstance(d, dict):
-                for k, v in d.items():
-                    full = f"{prefix}{k}" if not prefix else f"{prefix}.{k}"
-                    if isinstance(v, (dict, list)):
-                        out.extend(_flatten(v, full, depth+1))
-                    elif v and str(v).strip() not in ("-","None","null",""):
-                        out.append(f"  {full}: {str(v)[:150]}")
-            elif isinstance(d, list):
-                for i, item in enumerate(d[:15]):
-                    out.extend(_flatten(item, f"{prefix}[{i}]", depth+1))
-            return out
-        flat = _flatten(src_data)
-        lines.extend(flat[:50])
-
-    lines.append("\n" + "=" * 60)
     return "\n".join(lines)
 
 
