@@ -1218,7 +1218,7 @@ def _imagegen_process(message):
         bot.send_message(chat_id, "Промпт не может быть пустым.")
         return
 
-    wait_msg = bot.send_message(chat_id, "🎨 Генерация фото... (до 90 секунд)")
+    wait_msg = bot.send_message(chat_id, "Генерация фото...")
 
     def _do():
         img_data = generate_image(prompt)
