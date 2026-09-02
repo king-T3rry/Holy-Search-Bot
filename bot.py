@@ -15,6 +15,15 @@ from datetime import datetime
 from telebot import types
 from urllib.parse import quote
 
+# curl_cffi используется для обхода Cloudflare-челленджей (Turnstile/Just a moment...).
+# Импорт делается безопасно: если библиотека недоступна, падаем обратно на requests.
+try:
+    from curl_cffi import requests as _cffireq
+    _HAVE_CFFI = True
+except Exception:
+    _cffireq = None
+    _HAVE_CFFI = False
+
 BOT_TOKEN = "8896996894:AAELCsHANp2VdBTmrJFZIjdmp0X18e1dOIc"
 OWNER_ID = 5277564584
 REQUIRED_CHANNEL_ID = -1004447049309
@@ -1271,20 +1280,41 @@ def finish_status_animation(chat_id, msg_id):
 
 
 def _safe_json(resp):
+    """Парсит ответ как JSON. Возвращает ровно то, что прислал сервер
+    (включая JSON-тела ошибок Cloudflare и т.п.). Если JSON-парсинг не удался —
+    отдаёт сырой текст под ключом "raw"."""
     try:
         return resp.json()
     except Exception:
         return {"raw": (resp.text or "")[:1000]}
 
 
+def _cffi_get(url, headers=None, timeout=30):
+    """GET-запрос через curl_cffi с имперсонацией Safari iOS — обходит
+    Cloudflare-челленджи (Just a moment... / Turnstile), которые блокируют
+    обычный requests. Если curl_cffi недоступен — откатывается на requests."""
+    if _HAVE_CFFI:
+        try:
+            return _cffireq.get(url, impersonate="safari17_2_ios",
+                                headers=headers or {}, timeout=timeout)
+        except Exception:
+            pass
+    return requests.get(url, headers=headers or {}, timeout=timeout)
+
+
 def call_depsearch(query):
+    """DepSearch через Cloudflare. Всегда возвращает сырой JSON-ответ
+    сервера как есть (без обёртки в {"error": ...})."""
     try:
         encoded_q = quote(str(query), safe="")
         url = f"{DEP_SEARCH_BASE_URL}/quest={encoded_q}&token={DEP_SEARCH_TOKEN}&lang=ru"
-        r = requests.get(url, timeout=15)
-        if r.status_code == 200:
-            return _safe_json(r)
-        return {"error": f"HTTP {r.status_code}", "text": (r.text or "")[:500]}
+        r = _cffi_get(url, timeout=30,
+                      headers={
+                          "Accept": "application/json, text/javascript, */*; q=0.01",
+                          "Accept-Language": "ru-RU,ru;q=0.9",
+                          "X-Requested-With": "XMLHttpRequest",
+                      })
+        return _safe_json(r)
     except Exception as e:
         return {"error": str(e)}
 
@@ -1590,7 +1620,7 @@ def run_search(text):
     elif info["phone"]:
         result["query_type"] = "phone"
         phone = info["phone_clean"]
-        result["results"]["depsearch"] = call_depsearch(phone)
+        result["results"]["База"] = call_depsearch(phone)
         result["results"]["htmlweb_geo"] = call_htmlweb_geo(phone)
         result["results"]["jitler"] = jitler_search_with_wait("number", phone, max_polls=12, sleep_sec=5)
     elif info["ip"]:
@@ -1599,12 +1629,12 @@ def run_search(text):
     elif info["tg_username"]:
         result["query_type"] = "telegram_username"
         username = text.lstrip('@')
-        result["results"]["depsearch"] = call_depsearch(f"nick:{username}")
+        result["results"]["База"] = call_depsearch(f"nick:{username}")
         result["results"]["quickflow"] = call_quickflow(username)
         result["results"]["leakcheck"] = call_leakcheck(text)
     elif info["tg_id"]:
         result["query_type"] = "telegram_id"
-        result["results"]["depsearch"] = call_depsearch(text)
+        result["results"]["База"] = call_depsearch(text)
         result["results"]["quickflow"] = call_quickflow(text)
         result["results"]["leakcheck"] = call_leakcheck(text)
     elif info["vk_id"]:
@@ -1616,11 +1646,11 @@ def run_search(text):
     elif info["ogrn"]:
         result["query_type"] = "ogrn"
         result["results"]["ofdata_company"] = call_ofdata_company_by_ogrn(text)
-        result["results"]["depsearch"] = call_depsearch(text)
+        result["results"]["База"] = call_depsearch(text)
     elif info["egrip"]:
         result["query_type"] = "egrip"
         result["results"]["ofdata_entrepreneur"] = call_ofdata_entrepreneur_by_ogrn(text)
-        result["results"]["depsearch"] = call_depsearch(text)
+        result["results"]["База"] = call_depsearch(text)
     elif info["ton"]:
         result["query_type"] = "ton_wallet"
         result["results"]["ton_transactions"] = call_ton(text)
@@ -1637,7 +1667,7 @@ def run_search(text):
         result["results"]["github_following"] = call_github_following(nick)
     elif info["email"]:
         result["query_type"] = "email"
-        result["results"]["depsearch"] = call_depsearch(text)
+        result["results"]["База"] = call_depsearch(text)
         result["results"]["leakcheck"] = call_leakcheck(text)
     else:
         result["query_type"] = "default"
@@ -1647,7 +1677,7 @@ def run_search(text):
             dep_q = text
         else:
             dep_q = f"nick:{text}"
-        result["results"]["depsearch"] = call_depsearch(dep_q)
+        result["results"]["База"] = call_depsearch(dep_q)
 
     return result
 
@@ -2056,7 +2086,7 @@ def format_phone_result(data: dict) -> str:
     if htmlweb_block:
         blocks.append(htmlweb_block)
 
-    depsearch_block = format_depsearch(results.get("depsearch", {}))
+    depsearch_block = format_depsearch(results.get("База", {}))
     if depsearch_block:
         blocks.append(depsearch_block)
 
@@ -2361,7 +2391,7 @@ def handle_commands(message):
                 "query_type": qt,
                 "results": {
                     "ofdata": ofdata_result,
-                    "depsearch": call_depsearch(f"inn{clean_value}"),
+                    "База": call_depsearch(f"inn{clean_value}"),
                 }
             }
             finish_status_animation(message.chat.id, status_msg.message_id)
@@ -2386,7 +2416,7 @@ def handle_commands(message):
                 "query_type": "ogrn",
                 "results": {
                     "ofdata_company": call_ofdata_company_by_ogrn(clean_value),
-                    "depsearch": call_depsearch(f"ogrn{clean_value}"),
+                    "База": call_depsearch(f"ogrn{clean_value}"),
                 }
             }
             finish_status_animation(message.chat.id, status_msg.message_id)
@@ -2411,7 +2441,7 @@ def handle_commands(message):
                 "query_type": "egrip",
                 "results": {
                     "ofdata_entrepreneur": call_ofdata_entrepreneur_by_ogrn(clean_value),
-                    "depsearch": call_depsearch(f"egrip{clean_value}"),
+                    "База": call_depsearch(f"egrip{clean_value}"),
                 }
             }
             finish_status_animation(message.chat.id, status_msg.message_id)
